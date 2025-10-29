@@ -1,223 +1,157 @@
+# gait biomechanics — knee joint data (kaggle)
+# walking speed ≈ 3.2 ± 0.4 km/h (10 male participants)
+# goal: analyse + plot baseline gait → then extrapolate for diff speeds
+
 import kagglehub
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import make_interp_spline
-
-# Set up non-blocking plots
-plt.ion()  # Interactive mode ON
-
-# ----------------------------------------------------------
-# Step 1: Download dataset directly from Kaggle
-# ----------------------------------------------------------
-print("Downloading dataset from Kaggle...")
-
-# Correct way to load dataset with the new KaggleHub API
-path = kagglehub.dataset_download("anitarostami/enhanced-gait-biomechanics-dataset")
-
-print(f"Dataset downloaded to: {path}")
-
-# Find the CSV file in the downloaded directory
 import os
-csv_file = None
-for file in os.listdir(path):
-    if file.endswith('.csv'):
-        csv_file = os.path.join(path, file)
-        break
 
-if csv_file is None:
-    raise FileNotFoundError("No CSV file found in the downloaded dataset")
+plt.ion()  # interactive mode on (non-blocking)
 
-print(f"Found CSV file: {csv_file}")
+# ------------------------------------------------------------
+# step 1 → download + load dataset
+# ------------------------------------------------------------
+print("→ downloading dataset...")
 
-# Load the dataset
-df = pd.read_csv(csv_file)
+path = kagglehub.dataset_download("anitarostami/enhanced-gait-biomechanics-dataset")
+print(f"dataset downloaded to: {path}")
 
-print("Dataset loaded successfully!")
-print(f"Dataset shape: {df.shape}")
-print(f"Columns: {df.columns.tolist()}")
+# find csv file
+csv = next((os.path.join(path, f) for f in os.listdir(path) if f.endswith('.csv')), None)
+if not csv:
+    raise FileNotFoundError("no csv file found")
+print(f"found csv: {csv}")
 
-# ----------------------------------------------------------
-# Step 2: Filter for knee joint (2) and unbraced condition (1)
-# ----------------------------------------------------------
-filtered_data = df[(df['joint'] == 2) & (df['condition'] == 1)].copy()
+# load to dataframe
+df = pd.read_csv(csv)
+print(f"loaded ✓  shape {df.shape}")
+print(f"columns: {df.columns.tolist()}")
 
-print(f"\nTotal records: {len(df)}")
-print(f"Filtered records (knee joint, unbraced): {len(filtered_data)}")
-print(f"Left leg samples: {len(filtered_data[filtered_data['leg'] == 1])}")
-print(f"Right leg samples: {len(filtered_data[filtered_data['leg'] == 2])}")
+# ------------------------------------------------------------
+# step 2 → focus on knee joint + unbraced condition
+# ------------------------------------------------------------
+data = df[(df['joint'] == 2) & (df['condition'] == 1)].copy()
 
-# ----------------------------------------------------------
-# Step 3: Calculate mean and SD across gait cycle for each leg
-# ----------------------------------------------------------
-def calculate_leg_averages(data, parameter):
-    """Compute mean and SD for each time point and leg."""
-    stats = data.groupby(['time', 'leg'])[parameter].agg(['mean', 'std']).reset_index()
-    left_leg = stats[stats['leg'] == 1].sort_values('time')
-    right_leg = stats[stats['leg'] == 2].sort_values('time')
-    return left_leg, right_leg
+print(f"\ntotal records: {len(df)}")
+print(f"knee (joint=2) + unbraced (cond=1): {len(data)}")
+print(f"left leg:  {len(data[data['leg']==1])}")
+print(f"right leg: {len(data[data['leg']==2])}")
 
-angle_left, angle_right = calculate_leg_averages(filtered_data, 'angle')
-velocity_left, velocity_right = calculate_leg_averages(filtered_data, 'velocity')
-accel_left, accel_right = calculate_leg_averages(filtered_data, 'acceleration')
+# ------------------------------------------------------------
+# step 3 → mean + std across gait cycle (per leg)
+# ------------------------------------------------------------
+def leg_stats(d, var):
+    g = d.groupby(['time','leg'])[var].agg(['mean','std']).reset_index()
+    left = g[g['leg']==1].sort_values('time')
+    right = g[g['leg']==2].sort_values('time')
+    return left, right
 
-print("\nStatistical calculations completed!")
+angle_L, angle_R = leg_stats(data, 'angle')
+vel_L, vel_R = leg_stats(data, 'velocity')
+acc_L, acc_R = leg_stats(data, 'acceleration')
 
-# ----------------------------------------------------------
-# Step 4: Create non-blocking plots
-# ----------------------------------------------------------
-def plot_leg_data(leg_data, leg_label, parameter_name, y_label, color):
-    """Create and display a non-blocking plot"""
-    plt.figure(figsize=(10, 6))
-    
-    time_points = np.linspace(leg_data['time'].min(), leg_data['time'].max(), 200)
-    
-    mean_spline = make_interp_spline(leg_data['time'], leg_data['mean'], k=3)
-    std_spline = make_interp_spline(leg_data['time'], leg_data['std'], k=3)
-    
-    mean_smooth = mean_spline(time_points)
-    std_smooth = std_spline(time_points)
-    
-    plt.plot(time_points, mean_smooth, color=color, linewidth=2, label=f'{leg_label} mean')
-    plt.fill_between(time_points, mean_smooth - std_smooth, mean_smooth + std_smooth,
-                    color=color, alpha=0.2, label='±1 SD')
-    plt.xlabel('Gait cycle (%)')
-    plt.ylabel(y_label)
-    plt.title(f'{parameter_name} - {leg_label}')
+print("\n→ mean ± sd calculated for each leg.")
+
+# ------------------------------------------------------------
+# step 4 → make baseline plots (non-blocking)
+# ------------------------------------------------------------
+def quickplot(d, leg, label, ylabel, col):
+    t = np.linspace(d['time'].min(), d['time'].max(), 200)
+    mean = make_interp_spline(d['time'], d['mean'], k=3)(t)
+    sd = make_interp_spline(d['time'], d['std'], k=3)(t)
+
+    plt.figure(figsize=(10,6))
+    plt.plot(t, mean, c=col, lw=2, label=f"{leg} mean")
+    plt.fill_between(t, mean - sd, mean + sd, color=col, alpha=0.25, label="±1 SD")
+    plt.xlabel("gait cycle (%)")
+    plt.ylabel(ylabel)
+    plt.title(f"{label} — {leg}")
     plt.legend()
-    plt.grid(True, linestyle='--', alpha=0.7)
+    plt.grid(True, ls='--', alpha=0.7)
     plt.tight_layout()
-    
-    # Non-blocking show
     plt.show(block=False)
-    plt.pause(0.1)  # Brief pause to render the plot
+    plt.pause(0.1)
 
-# Create all plots without blocking
-print("\nGenerating plots (non-blocking)...")
+print("\n→ generating baseline plots...")
 
-# Left leg plots
-plot_leg_data(angle_left, 'Left Leg', 'Knee Angle', 'Angle (radians)', 'blue')
-plot_leg_data(velocity_left, 'Left Leg', 'Angular Velocity', 'Velocity (rad/s)', 'green')
-plot_leg_data(accel_left, 'Left Leg', 'Angular Acceleration', 'Acceleration (rad/s²)', 'purple')
+# left leg plots
+quickplot(angle_L, "Left Leg", "Knee Angle", "Angle (rad)", "blue")
+quickplot(vel_L, "Left Leg", "Angular Velocity", "Velocity (rad/s)", "green")
+quickplot(acc_L, "Left Leg", "Angular Acceleration", "Acceleration (rad/s²)", "purple")
 
-# Right leg plots
-plot_leg_data(angle_right, 'Right Leg', 'Knee Angle', 'Angle (radians)', 'red')
-plot_leg_data(velocity_right, 'Right Leg', 'Angular Velocity', 'Velocity (rad/s)', 'orange')
-plot_leg_data(accel_right, 'Right Leg', 'Angular Acceleration', 'Acceleration (rad/s²)', 'brown')
+# right leg plots
+quickplot(angle_R, "Right Leg", "Knee Angle", "Angle (rad)", "red")
+quickplot(vel_R, "Right Leg", "Angular Velocity", "Velocity (rad/s)", "orange")
+quickplot(acc_R, "Right Leg", "Angular Acceleration", "Acceleration (rad/s²)", "brown")
 
-# ----------------------------------------------------------
-# Step 5: Print key statistics with proper positive/negative values
-# ----------------------------------------------------------
+# ------------------------------------------------------------
+# step 5 → print peak stats (flexion / extension)
+# ------------------------------------------------------------
 print("\n" + "="*60)
-print("KEY STATISTICS WITH PEAK DIRECTIONS")
+print("KNEE JOINT PEAK ANGLES")
 print("="*60)
 
-for param_name, left_data, right_data in [
-    ('Angle', angle_left, angle_right),
-    ('Velocity', velocity_left, velocity_right), 
-    ('Acceleration', accel_left, accel_right)
-]:
-    print(f"\n--- {param_name} ---")
-    
-    if param_name == 'Angle':
-        # For angle, show max flexion and min extension
-        left_max_idx = left_data['mean'].idxmax()
-        left_min_idx = left_data['mean'].idxmin()
-        right_max_idx = right_data['mean'].idxmax()
-        right_min_idx = right_data['mean'].idxmin()
-        
-        print(f"Left leg:")
-        print(f"  Max flexion: {left_data.loc[left_max_idx, 'mean']:+.3f} rad at {left_data.loc[left_max_idx, 'time']:.1f}%")
-        print(f"  Max extension: {left_data.loc[left_min_idx, 'mean']:+.3f} rad at {left_data.loc[left_min_idx, 'time']:.1f}%")
-        
-        print(f"Right leg:")
-        print(f"  Max flexion: {right_data.loc[right_max_idx, 'mean']:+.3f} rad at {right_data.loc[right_max_idx, 'time']:.1f}%")
-        print(f"  Max extension: {right_data.loc[right_min_idx, 'mean']:+.3f} rad at {right_data.loc[right_min_idx, 'time']:.1f}%")
-        
-    else:
-        # For velocity and acceleration, show positive and negative peaks separately
-        left_pos_peak_idx = left_data['mean'].idxmax()
-        left_neg_peak_idx = left_data['mean'].idxmin()
-        right_pos_peak_idx = right_data['mean'].idxmax()
-        right_neg_peak_idx = right_data['mean'].idxmin()
-        
-        left_pos_peak = left_data.loc[left_pos_peak_idx, 'mean']
-        left_neg_peak = left_data.loc[left_neg_peak_idx, 'mean']
-        right_pos_peak = right_data.loc[right_pos_peak_idx, 'mean']
-        right_neg_peak = right_data.loc[right_neg_peak_idx, 'mean']
-        
-        print(f"Left leg:")
-        print(f"  Positive peak: {left_pos_peak:+.3f} at {left_data.loc[left_pos_peak_idx, 'time']:.1f}%")
-        print(f"  Negative peak: {left_neg_peak:+.3f} at {left_data.loc[left_neg_peak_idx, 'time']:.1f}%")
-        
-        print(f"Right leg:")
-        print(f"  Positive peak: {right_pos_peak:+.3f} at {right_data.loc[right_pos_peak_idx, 'time']:.1f}%")
-        print(f"  Negative peak: {right_neg_peak:+.3f} at {right_data.loc[right_neg_peak_idx, 'time']:.1f}%")
+def peaks(name, L, R):
+    lmax, lmin = L['mean'].idxmax(), L['mean'].idxmin()
+    rmax, rmin = R['mean'].idxmax(), R['mean'].idxmin()
+    print(f"\n{name}:")
+    print(f"→ Left:  flex {L.loc[lmax,'mean']:+.3f} rad @ {L.loc[lmax,'time']:.1f}% | ext {L.loc[lmin,'mean']:+.3f} rad @ {L.loc[lmin,'time']:.1f}%")
+    print(f"→ Right: flex {R.loc[rmax,'mean']:+.3f} rad @ {R.loc[rmax,'time']:.1f}% | ext {R.loc[rmin,'mean']:+.3f} rad @ {R.loc[rmin,'time']:.1f}%")
 
-print("\n" + "="*60)
-print("ANALYSIS COMPLETE!")
-print("All plots have been generated and displayed.")
-print("The code will continue running without waiting for plots to be closed.")
-print("Dataset was downloaded directly from Kaggle.")
-print("="*60)
+peaks("Knee Angle", angle_L, angle_R)
 
-# ----------------------------------------------------------
-# Step 6: Extrapolate and plot knee angle vs gait cycle
-# ----------------------------------------------------------
-def extrapolate_gait(leg_data, base_speed, target_speed):
-    """Generate extrapolated knee angle data for a new walking speed."""
-    ratio = target_speed / base_speed
-    # Faster speeds shorten the gait cycle
-    scaled_time = leg_data['time'] / ratio**0.8
-    scaled_time = (scaled_time / scaled_time.max()) * 100  # normalize to 0–100%
+print("\n→ baseline analysis done ✓")
 
-    # Knee angle amplitude slightly increases with speed
-    amp_factor = 1 + 0.15 * (ratio - 1)
+# ------------------------------------------------------------
+# step 6 → extrapolate to diff walking speeds
+# ------------------------------------------------------------
+def gait_scale(d, base_v, new_v):
+    r = new_v / base_v
+    t_scaled = d['time'] / r**0.8  # faster → shorter cycle
+    t_scaled = (t_scaled / t_scaled.max()) * 100  # normalize to 0–100%
+    amp = 1 + 0.15 * (r - 1)  # amplitude grows slightly w/ speed
+    return pd.DataFrame({
+        'time': t_scaled,
+        'mean': d['mean'] * amp,
+        'std': d['std'] * amp
+    })
 
-    scaled_mean = leg_data['mean'] * amp_factor
-    scaled_std = leg_data['std'] * amp_factor
-
-    return pd.DataFrame({'time': scaled_time, 'mean': scaled_mean, 'std': scaled_std})
-
-
-# Speeds to simulate (in km/h)
 speeds = [2.5, 3.2, 3.8, 4.5]
+print("\n→ extrapolating knee angles for diff speeds...")
 
-# ----------------------------------------------------------
-# LEFT LEG PLOT
-# ----------------------------------------------------------
-plt.figure(figsize=(10, 6))
+# ------------------------------------------------------------
+# step 7 → plot knee angle vs gait cycle (left + right)
+# ------------------------------------------------------------
+# left
+plt.figure(figsize=(10,6))
 for v in speeds:
-    scaled = extrapolate_gait(angle_left, base_speed=3.2, target_speed=v)
-    plt.plot(scaled['time'], scaled['mean'], linewidth=2, label=f"{v:.1f} km/h")
-
-plt.title("Left Knee Angle vs. Gait Cycle (Different Walking Speeds)")
+    scaled = gait_scale(angle_L, 3.2, v)
+    plt.plot(scaled['time'], scaled['mean'], lw=2, label=f"{v:.1f} km/h")
+plt.title("Left Knee Angle vs Gait Cycle — Different Walking Speeds")
 plt.xlabel("Gait cycle (%)")
-plt.ylabel("Knee angle (radians)")
-plt.grid(True, linestyle='--', alpha=0.7)
+plt.ylabel("Knee angle (rad)")
+plt.grid(True, ls='--', alpha=0.7)
 plt.legend()
 plt.tight_layout()
 plt.show(block=False)
 plt.pause(0.1)
 
-# ----------------------------------------------------------
-# RIGHT LEG PLOT
-# ----------------------------------------------------------
-plt.figure(figsize=(10, 6))
+# right
+plt.figure(figsize=(10,6))
 for v in speeds:
-    scaled = extrapolate_gait(angle_right, base_speed=3.2, target_speed=v)
-    plt.plot(scaled['time'], scaled['mean'], linewidth=2, label=f"{v:.1f} km/h")
-
-plt.title("Right Knee Angle vs. Gait Cycle (Different Walking Speeds)")
+    scaled = gait_scale(angle_R, 3.2, v)
+    plt.plot(scaled['time'], scaled['mean'], lw=2, label=f"{v:.1f} km/h")
+plt.title("Right Knee Angle vs Gait Cycle — Different Walking Speeds")
 plt.xlabel("Gait cycle (%)")
-plt.ylabel("Knee angle (radians)")
-plt.grid(True, linestyle='--', alpha=0.7)
+plt.ylabel("Knee angle (rad)")
+plt.grid(True, ls='--', alpha=0.7)
 plt.legend()
 plt.tight_layout()
 plt.show(block=False)
 plt.pause(0.1)
 
-print("\nExtrapolated knee angle plots generated for left and right legs at multiple walking speeds.")
-
-# Optional: Keep the script running until user presses Enter
-input("Press Enter to exit and close all plots...")
+print("\n✅ done — all 6 baseline + 2 extrapolated plots generated.")
+input("press Enter to close plots...")
