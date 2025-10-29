@@ -161,5 +161,63 @@ print("The code will continue running without waiting for plots to be closed.")
 print("Dataset was downloaded directly from Kaggle.")
 print("="*60)
 
+# ----------------------------------------------------------
+# Step 6: Extrapolate and plot knee angle vs gait cycle
+# ----------------------------------------------------------
+def extrapolate_gait(leg_data, base_speed, target_speed):
+    """Generate extrapolated knee angle data for a new walking speed."""
+    ratio = target_speed / base_speed
+    # Faster speeds shorten the gait cycle
+    scaled_time = leg_data['time'] / ratio**0.8
+    scaled_time = (scaled_time / scaled_time.max()) * 100  # normalize to 0–100%
+
+    # Knee angle amplitude slightly increases with speed
+    amp_factor = 1 + 0.15 * (ratio - 1)
+
+    scaled_mean = leg_data['mean'] * amp_factor
+    scaled_std = leg_data['std'] * amp_factor
+
+    return pd.DataFrame({'time': scaled_time, 'mean': scaled_mean, 'std': scaled_std})
+
+
+# Speeds to simulate (in km/h)
+speeds = [2.5, 3.2, 3.8, 4.5]
+
+# ----------------------------------------------------------
+# LEFT LEG PLOT
+# ----------------------------------------------------------
+plt.figure(figsize=(10, 6))
+for v in speeds:
+    scaled = extrapolate_gait(angle_left, base_speed=3.2, target_speed=v)
+    plt.plot(scaled['time'], scaled['mean'], linewidth=2, label=f"{v:.1f} km/h")
+
+plt.title("Left Knee Angle vs. Gait Cycle (Different Walking Speeds)")
+plt.xlabel("Gait cycle (%)")
+plt.ylabel("Knee angle (radians)")
+plt.grid(True, linestyle='--', alpha=0.7)
+plt.legend()
+plt.tight_layout()
+plt.show(block=False)
+plt.pause(0.1)
+
+# ----------------------------------------------------------
+# RIGHT LEG PLOT
+# ----------------------------------------------------------
+plt.figure(figsize=(10, 6))
+for v in speeds:
+    scaled = extrapolate_gait(angle_right, base_speed=3.2, target_speed=v)
+    plt.plot(scaled['time'], scaled['mean'], linewidth=2, label=f"{v:.1f} km/h")
+
+plt.title("Right Knee Angle vs. Gait Cycle (Different Walking Speeds)")
+plt.xlabel("Gait cycle (%)")
+plt.ylabel("Knee angle (radians)")
+plt.grid(True, linestyle='--', alpha=0.7)
+plt.legend()
+plt.tight_layout()
+plt.show(block=False)
+plt.pause(0.1)
+
+print("\nExtrapolated knee angle plots generated for left and right legs at multiple walking speeds.")
+
 # Optional: Keep the script running until user presses Enter
 input("Press Enter to exit and close all plots...")
