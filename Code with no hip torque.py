@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 #           INPUT / SETUP         #
 # ------------------------------- #
 
-def get_height_cm() -> float:
+def GetHeight_cm() -> float:
     while True:
         try:
             h = float(input("Enter your height in cm: ").strip())
@@ -33,7 +33,7 @@ def get_height_cm() -> float:
 #       GEOMETRY & GAIT PARAMS    #
 # ------------------------------- #
 
-def compute_geometry(height_cm: float, mass: float):
+def CompGeo(height_cm: float, mass: float):
     lower_leg_cm = (height_cm - 123) / 1.24
     foot_cm      = 0.044 * height_cm + 19.286
     stride_m     = (0.415 * height_cm) / 100
@@ -69,7 +69,7 @@ def gait_params(speed_kmh: float, stride_m: float):
 #       DATA & PREPROCESSING      #
 # ------------------------------- #
 
-def compute_shank_global(df: pd.DataFrame, thigh_target_deg: float = 2.0):
+def CompShankGlob(df: pd.DataFrame, thigh_target_deg: float = 2.0):
     hip  = df[df.joint == 3].rename(columns={'angle': 'hip'})
     knee = df[df.joint == 2].rename(columns={'angle': 'knee'})
     keys = ['subject', 'condition', 'replication', 'leg', 'time']
@@ -261,10 +261,10 @@ def main():
     mass = 4.0
     speed_kmh = 3.2
 
-    height = get_height_cm()
+    height = GetHeight_cm()
     print(f"\nUsing height = {height:.1f} cm")
 
-    geom = compute_geometry(height, mass)
+    geom = CompGeo(height, mass)
     gait = gait_params(speed_kmh, geom['stride'])
 
     print(f"Walking speed: {speed_kmh:.1f} km/h")
@@ -283,7 +283,7 @@ def main():
 
     df = df[(df.condition == 1) & (df.leg == 2)].copy()
 
-    shank = compute_shank_global(df)
+    shank = CompShankGlob(df)
     t, theta_mean = build_mean_curve(shank)
 
     win = best_window(t, theta_mean, wlen=0.15)
